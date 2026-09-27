@@ -5,6 +5,7 @@ public class Holding {
     private final String ticker;
     private int quantity;
     private BigDecimal averagePurchasePrice;
+    
     public Holding(String ticker, int quantity, BigDecimal averagePurchasePrice){
         this.ticker = ticker;
         this.quantity = quantity;
@@ -26,7 +27,8 @@ public class Holding {
     public BigDecimal getAveragePurchasePrice(){
         return averagePurchasePrice;
     }
-    
+
+
     public void addShares(int additionalQuantity, BigDecimal purchasePrice) {
         if (additionalQuantity <= 0) {
             throw new IllegalArgumentException("Additional quantity must be positive");
@@ -54,5 +56,14 @@ public class Holding {
         this.quantity = newQuantity;
         this.averagePurchasePrice = newAverage;
     }
+    public void removeShares(int quantityToRemove){
+        if(quantityToRemove<=0){
+            throw new IllegalArgumentException("Quantity must be more than 0");
 
+        }
+        if(quantityToRemove>quantity){
+            throw new IllegalArgumentException("Quantity of shares in holdings lesser than sell quantity");
+        }
+        quantity = quantity-quantityToRemove;
+    }
 }

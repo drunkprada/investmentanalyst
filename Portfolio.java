@@ -34,6 +34,7 @@ class Portfolio{
         return holdings.get(ticker);
 
     }
+    
     public void buy(String ticker, int quantity, BigDecimal purchasePrice){
         if (ticker == null || ticker.isBlank()) {
             throw new IllegalArgumentException("Ticker cannot be blank");

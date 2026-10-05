@@ -1,8 +1,8 @@
-
+package com.project.portfolio.domain;
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
-class Portfolio{
+public class Portfolio{
     private final String portfolioId;
     private final String name;
     private BigDecimal cashBalance;

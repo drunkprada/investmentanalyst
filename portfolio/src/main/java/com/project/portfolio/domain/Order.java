@@ -1,4 +1,5 @@
-class Order{
+package com.project.portfolio.domain;
+public class Order{
     private final String orderId;
     private final String portfolioId;
     private final String ticker;

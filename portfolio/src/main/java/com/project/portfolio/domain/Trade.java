@@ -1,3 +1,4 @@
+package com.project.portfolio.domain;
 import java.time.Instant;
 import java.math.BigDecimal;
 public class Trade{

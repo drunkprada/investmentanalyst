@@ -1,3 +1,4 @@
+package com.project.portfolio.domain;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 

@@ -39,6 +39,13 @@ public class Holding {
             throw new IllegalArgumentException("Purchase price must be positive");
         }
 
+        final int newQuantity;
+        try {
+            newQuantity = Math.addExact(quantity, additionalQuantity);
+        } catch (ArithmeticException exception) {
+            throw new IllegalArgumentException("Total share quantity exceeds the supported limit", exception);
+        }
+
         BigDecimal oldCost =
             averagePurchasePrice.multiply(BigDecimal.valueOf(quantity));
 
@@ -46,7 +53,6 @@ public class Holding {
             purchasePrice.multiply(BigDecimal.valueOf(additionalQuantity));
 
         BigDecimal totalCost = oldCost.add(newCost);
-        int newQuantity = quantity + additionalQuantity;
 
         BigDecimal newAverage = totalCost.divide(
             BigDecimal.valueOf(newQuantity),

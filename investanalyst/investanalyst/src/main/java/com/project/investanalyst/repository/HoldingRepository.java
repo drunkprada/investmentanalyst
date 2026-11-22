@@ -8,6 +8,6 @@ import java.util.Optional;
 
 public interface HoldingRepository extends JpaRepository<Holding,Long> {
     List<Holding> findByPortfolioId(Long portfolioId);
-    Optional<Holding> findByPortfolioIdandTicker(Long portfolioId, String ticker);
+    Optional<Holding> findByPortfolioIdAndTicker(Long portfolioId, String ticker);
 
 }

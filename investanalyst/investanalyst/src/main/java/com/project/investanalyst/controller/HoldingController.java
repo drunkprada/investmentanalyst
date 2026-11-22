@@ -3,7 +3,6 @@ package com.project.investanalyst.controller;
 
 
 import com.project.investanalyst.dto.TradeRequest;
-import com.project.investanalyst.dto.TradeResponse;
 import com.project.investanalyst.entity.Holding;
 import com.project.investanalyst.entity.Trade;
 import com.project.investanalyst.service.HoldingService;
@@ -13,7 +12,6 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
-import java.awt.desktop.SystemHotkey;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -45,22 +43,9 @@ public class HoldingController {
         holdingService.sellStock(id, request.ticker(), request.quantity(),request.price());
     }
 
-    @GetMapping("/portfolio/{id}/trades")
-    public List<TradeResponse> getTrades(@PathVariable Long id) {
-
-        List<Trade> trades =
-                holdingService.getTradesByPortfolioId(id);
-
-        return trades.stream()
-                .map(trade -> new TradeResponse(
-                        trade.getId(),
-                        trade.getPortfolio().getId(),
-                        trade.getTicker(),
-                        trade.getType(),
-                        trade.getQuantity(),
-                        trade.getExecutionPrice(),
-                        trade.getExecutionTime()
-                ))
-                .toList();
+    @GetMapping("/portfolio/{id}/trade")
+    public List<Trade> getTrades(@PathVariable Long id){
+        List<Trade> trades = holdingService.getTradesByPortfolioId(id);
+        return holdingService.getTradesByPortfolioId(id);
     }
 }

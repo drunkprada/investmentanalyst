@@ -1,25 +1,16 @@
-
 package com.project.investanalyst.controller;
 
-
+import com.project.investanalyst.dto.HoldingResponse;
 import com.project.investanalyst.dto.TradeRequest;
-import com.project.investanalyst.entity.Holding;
-import com.project.investanalyst.entity.Trade;
+import com.project.investanalyst.dto.TradeResponse;
 import com.project.investanalyst.service.HoldingService;
-
 import jakarta.validation.Valid;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 
 @RestController
 public class HoldingController {
-
     private final HoldingService holdingService;
 
     public HoldingController(HoldingService holdingService) {
@@ -27,8 +18,16 @@ public class HoldingController {
     }
 
     @GetMapping("/portfolio/{id}/holdings")
-    public List<Holding> getHoldings(@PathVariable Long id) {
-        return holdingService.getHoldingsByPortfolioId(id);
+    public List<HoldingResponse> getHoldings(@PathVariable Long id) {
+        return holdingService.getHoldingsByPortfolioId(id).stream()
+                .map(holding -> new HoldingResponse(
+                        holding.getId(),
+                        holding.getPortfolio().getId(),
+                        holding.getTicker(),
+                        holding.getAverageCost(),
+                        holding.getQuantity()
+                ))
+                .toList();
     }
 
     @PostMapping("/portfolio/{id}/buy")
@@ -39,13 +38,22 @@ public class HoldingController {
 
     @PostMapping("/portfolio/{id}/sell")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void sellStock(@PathVariable Long id, @Valid @RequestBody TradeRequest request){
-        holdingService.sellStock(id, request.ticker(), request.quantity(),request.price());
+    public void sellStock(@PathVariable Long id, @Valid @RequestBody TradeRequest request) {
+        holdingService.sellStock(id, request.ticker(), request.quantity(), request.price());
     }
 
-    @GetMapping("/portfolio/{id}/trade")
-    public List<Trade> getTrades(@PathVariable Long id){
-        List<Trade> trades = holdingService.getTradesByPortfolioId(id);
-        return holdingService.getTradesByPortfolioId(id);
+    @GetMapping("/portfolio/{id}/trades")
+    public List<TradeResponse> getTrades(@PathVariable Long id) {
+        return holdingService.getTradesByPortfolioId(id).stream()
+                .map(trade -> new TradeResponse(
+                        trade.getId(),
+                        trade.getPortfolio().getId(),
+                        trade.getTicker(),
+                        trade.getType(),
+                        trade.getQuantity(),
+                        trade.getExecutionPrice(),
+                        trade.getExecutionTime()
+                ))
+                .toList();
     }
 }

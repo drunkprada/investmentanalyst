@@ -1,8 +1,11 @@
 package com.project.investanalyst.controller;
 
+import com.project.investanalyst.dto.CreatePortfolioRequest;
 import com.project.investanalyst.dto.PortfolioResponse;
 import com.project.investanalyst.entity.Portfolio;
 import com.project.investanalyst.service.PortfolioService;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
@@ -20,26 +23,18 @@ public class PortfolioController {
     }
 
     @PostMapping("/portfolio")
-    public PortfolioResponse createPortfolio(@RequestBody Portfolio portfolio) {
-        return toResponse(portfolioService.createPortfolio(
-                portfolio.getName(), portfolio.getInitialCash()
-        ));
+    @ResponseStatus(HttpStatus.CREATED)
+    public PortfolioResponse createPortfolio(@Valid @RequestBody CreatePortfolioRequest request) {
+        return toResponse(portfolioService.createPortfolio(request.name(), request.initialCash()));
     }
 
     @GetMapping("/portfolio")
     public List<PortfolioResponse> getAllPortfolios() {
-        return portfolioService.getAllPortfolios().stream()
-                .map(this::toResponse)
-                .toList();
+        return portfolioService.getAllPortfolios().stream().map(this::toResponse).toList();
     }
 
     private PortfolioResponse toResponse(Portfolio portfolio) {
-        return new PortfolioResponse(
-                portfolio.getId(),
-                portfolio.getName(),
-                portfolio.getInitialCash(),
-                portfolio.getAvailableCash(),
-                portfolio.getCurrency()
-        );
+        return new PortfolioResponse(portfolio.getId(), portfolio.getName(),
+                portfolio.getInitialCash(), portfolio.getAvailableCash(), portfolio.getCurrency());
     }
 }

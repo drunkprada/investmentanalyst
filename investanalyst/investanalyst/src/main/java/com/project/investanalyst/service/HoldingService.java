@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Locale;
 
@@ -61,16 +62,21 @@ public class HoldingService {
         }
     }
 
+    private BigDecimal moneyTotal(BigDecimal quantity, BigDecimal price) {
+        try {
+            return quantity.multiply(price).setScale(2, RoundingMode.UNNECESSARY);
+        } catch (ArithmeticException exception) {
+            throw new IllegalArgumentException("Trade total must be representable in cents");
+        }
+    }
+
     @Transactional
     public void buyStock(Long portfolioId, String ticker, BigDecimal quantity, BigDecimal purchasePrice) {
         validateQuantity(quantity);
         String symbol = normalizeTicker(ticker);
         BigDecimal price = pricingPolicy.validateDemoPrice(purchasePrice);
         Portfolio portfolio = lockPortfolio(portfolioId);
-        BigDecimal cost = quantity.multiply(price);
-        if (cost.scale() > 2) {
-            throw new IllegalArgumentException("Trade total must be representable in cents");
-        }
+        BigDecimal cost = moneyTotal(quantity, price);
         if (portfolio.getAvailableCash().compareTo(cost) < 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Insufficient cash balance");
         }
@@ -95,10 +101,7 @@ public class HoldingService {
         if (holding.getQuantity().compareTo(quantity) < 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Insufficient shares owned");
         }
-        BigDecimal proceeds = quantity.multiply(price);
-        if (proceeds.scale() > 2) {
-            throw new IllegalArgumentException("Trade total must be representable in cents");
-        }
+        BigDecimal proceeds = moneyTotal(quantity, price);
         if (holding.getQuantity().compareTo(quantity) == 0) {
             holdingRepository.delete(holding);
         } else {

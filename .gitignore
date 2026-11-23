@@ -41,3 +41,10 @@ build/
 
 ### VS Code ###
 .vscode/
+.env
+**/.env
+.idea_backup/workspace.xml
+
+.postman/
+postman/
+.idea_backup

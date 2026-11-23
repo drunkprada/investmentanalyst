@@ -80,7 +80,7 @@ class HoldingServiceTest {
         assertThrows(IllegalArgumentException.class,
                 () -> service.buyStock(1L, "AAPL", BigDecimal.ZERO, new BigDecimal("10.00")));
         assertThrows(IllegalArgumentException.class,
-                () -> service.buyStock(1L, "AAPL", new BigDecimal("0.001"), new BigDecimal("10.00")));
+                () -> service.buyStock(1L, "AAPL", new BigDecimal("0.0001"), new BigDecimal("10.00")));
         verify(trades, never()).save(any(Trade.class));
         verify(holdings, never()).save(any(Holding.class));
     }

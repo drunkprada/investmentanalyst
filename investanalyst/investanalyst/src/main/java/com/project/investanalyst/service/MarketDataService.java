@@ -6,6 +6,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Set;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.regex.Pattern;
 
 @Service
@@ -69,5 +76,53 @@ public class MarketDataService {
                     ex
             );
         }
+    }
+    public List<HistoricalPrice> getHistoricalPrices(String ticker, int outputSize) {
+        if (ticker == null || !TICKER_PATTERN.matcher(ticker).matches()) {
+            throw new IllegalArgumentException("Invalid ticker");
+        }
+        if (outputSize < 2 || outputSize > 5000) {
+            throw new IllegalArgumentException("Output size must be between 2 and 5000");
+        }
+        Map<?, ?> response;
+        try {
+            response = client.get()
+                    .uri(uri -> uri.path("/time_series")
+                            .queryParam("symbol", ticker)
+                            .queryParam("interval", "1day")
+                            .queryParam("outputsize", outputSize)
+                            .build())
+                    .header("Authorization", "apikey " + apiKey)
+                    .retrieve().body(Map.class);
+        } catch (org.springframework.web.client.RestClientException ex) {
+            throw new IllegalStateException("Unable to retrieve historical prices for " + ticker, ex);
+        }
+        if (response == null || !(response.get("values") instanceof List<?> values)
+                || values.isEmpty()) {
+            throw new IllegalStateException("Provider returned no historical prices for " + ticker);
+        }
+        List<HistoricalPrice> result = new ArrayList<>();
+        Set<LocalDate> seen = new HashSet<>();
+        for (Object item : values) {
+            if (!(item instanceof Map<?, ?> row)) {
+                throw new IllegalStateException("Malformed historical observation");
+            }
+            try {
+                if (!(row.get("datetime") instanceof String dateText)
+                        || row.get("close") == null) {
+                    throw new IllegalStateException("Missing historical date or close");
+                }
+                LocalDate date = LocalDate.parse(dateText);
+                double close = Double.parseDouble(row.get("close").toString());
+                if (!Double.isFinite(close) || close <= 0 || !seen.add(date)) {
+                    throw new IllegalStateException("Invalid or duplicate historical observation");
+                }
+                result.add(new HistoricalPrice(date, close));
+            } catch (DateTimeParseException | NumberFormatException ex) {
+                throw new IllegalStateException("Malformed historical date or close", ex);
+            }
+        }
+        result.sort(Comparator.comparing(HistoricalPrice::date));
+        return List.copyOf(result);
     }
 }

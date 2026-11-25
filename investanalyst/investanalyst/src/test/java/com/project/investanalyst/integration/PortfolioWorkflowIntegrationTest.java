@@ -1,11 +1,12 @@
+
 package com.project.investanalyst.integration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jayway.jsonpath.JsonPath;
 import com.project.investanalyst.repository.HoldingRepository;
-import com.project.investanalyst.repository.PortfolioRepository;
 import com.project.investanalyst.repository.TradeRepository;
 import com.project.investanalyst.service.HistoricalPrice;
 import com.project.investanalyst.service.MarketDataService;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -14,12 +15,16 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import static org.junit.jupiter.api.Assertions.*;
+
 import static org.hamcrest.Matchers.closeTo;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -27,87 +32,176 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class PortfolioWorkflowIntegrationTest {
-    @Autowired MockMvc mvc;
-    @Autowired ObjectMapper mapper;
-    @Autowired PortfolioRepository portfolios;
-    @Autowired HoldingRepository holdings;
-    @Autowired TradeRepository trades;
 
-    @MockitoBean MarketDataService marketData;
+    @Autowired
+    private MockMvc mvc;
+
+    @Autowired
+    private HoldingRepository holdings;
+
+    @Autowired
+    private TradeRepository trades;
+
+    @MockitoBean
+    private MarketDataService marketData;
 
     private long createPortfolio() throws Exception {
-        String body = mvc.perform(post("/portfolio")
+        String response = mvc.perform(post("/portfolio")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Integration Test\",\"initialCash\":1000.00}"))
+                        .content("""
+                                {
+                                  "name": "Integration Test",
+                                  "initialCash": 1000.00
+                                }
+                                """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.availableCash").value(1000.00))
-                .andReturn().getResponse().getContentAsString();
-        return mapper.readTree(body).get("id").asLong();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        Number id = JsonPath.read(response, "$.id");
+        return id.longValue();
     }
 
-    private void buy(long id, String ticker, int quantity, int price) throws Exception {
-        mvc.perform(post("/portfolio/{id}/buy", id)
+    private void buy(
+            long portfolioId,
+            String ticker,
+            int quantity,
+            int price
+    ) throws Exception {
+
+        String request = """
+                {
+                  "ticker": "%s",
+                  "quantity": %d,
+                  "price": %d
+                }
+                """.formatted(ticker, quantity, price);
+
+        mvc.perform(post("/portfolio/{id}/buy", portfolioId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"ticker\":\"%s\",\"quantity\":%d,\"price\":%d}"
-                                .formatted(ticker, quantity, price)))
+                        .content(request))
                 .andExpect(status().isNoContent());
     }
 
     @Test
-    void tradingWorkflowPersistsStateAndRejectsInvalidTrades() throws Exception {
+    void tradingWorkflowPersistsStateAndRejectsInvalidTrades()
+            throws Exception {
+
         long id = createPortfolio();
+
+        // Successful purchase
         buy(id, "AAPL", 2, 100);
 
         mvc.perform(get("/portfolio/{id}", id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.availableCash").value(800.00));
+
         mvc.perform(get("/portfolio/{id}/holdings", id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].ticker").value("AAPL"))
                 .andExpect(jsonPath("$[0].quantity").value(2));
 
+        // Insufficient cash must reject the purchase
         mvc.perform(post("/portfolio/{id}/buy", id)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"ticker\":\"MSFT\",\"quantity\":100,\"price\":100}"))
-                .andExpect(status().isConflict());
-        mvc.perform(post("/portfolio/{id}/sell", id)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"ticker\":\"AAPL\",\"quantity\":3,\"price\":120}"))
+                        .content("""
+                                {
+                                  "ticker": "MSFT",
+                                  "quantity": 100,
+                                  "price": 100
+                                }
+                                """))
                 .andExpect(status().isConflict());
 
-        // Rejected operations must leave persistent state unchanged.
+        // Selling more shares than owned must fail
+        mvc.perform(post("/portfolio/{id}/sell", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "ticker": "AAPL",
+                                  "quantity": 3,
+                                  "price": 120
+                                }
+                                """))
+                .andExpect(status().isConflict());
+
+        // Failed transactions must not change persisted state
         mvc.perform(get("/portfolio/{id}", id))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.availableCash").value(800.00));
-        assertEquals(1, holdings.findByPortfolioId(id).size());
-        assertEquals(0, holdings.findByPortfolioId(id).get(0)
-                .getQuantity().compareTo(new java.math.BigDecimal("2")));
-        assertEquals(1, trades.findByPortfolioIdOrderByExecutionTimeDesc(id).size());
 
+        assertEquals(1, holdings.findByPortfolioId(id).size());
+
+        assertEquals(
+                0,
+                holdings.findByPortfolioId(id)
+                        .get(0)
+                        .getQuantity()
+                        .compareTo(new BigDecimal("2"))
+        );
+
+        assertEquals(
+                1,
+                trades.findByPortfolioIdOrderByExecutionTimeDesc(id).size()
+        );
+
+        // Successful partial sale
         mvc.perform(post("/portfolio/{id}/sell", id)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"ticker\":\"AAPL\",\"quantity\":1,\"price\":120}"))
+                        .content("""
+                                {
+                                  "ticker": "AAPL",
+                                  "quantity": 1,
+                                  "price": 120
+                                }
+                                """))
                 .andExpect(status().isNoContent());
+
         mvc.perform(get("/portfolio/{id}", id))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.availableCash").value(920.00));
+
         mvc.perform(get("/portfolio/{id}/holdings", id))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].quantity").value(1));
+
         mvc.perform(get("/portfolio/{id}/trades", id))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2));
-        assertEquals(2, trades.findByPortfolioIdOrderByExecutionTimeDesc(id).size());
+
+        assertEquals(
+                2,
+                trades.findByPortfolioIdOrderByExecutionTimeDesc(id).size()
+        );
     }
 
     @Test
-    void riskWorkflowUsesControlledHistoryAndRejectsInsufficientData() throws Exception {
+    void riskWorkflowUsesControlledHistoryAndRejectsInsufficientData()
+            throws Exception {
+
         long id = createPortfolio();
+
         buy(id, "AAPL", 2, 100);
         buy(id, "MSFT", 1, 100);
 
+        // Constant prices should produce zero returns and volatility
         List<HistoricalPrice> stable = new ArrayList<>();
+
+        LocalDate start = LocalDate.of(2026, 1, 1);
+
         for (int i = 0; i < 22; i++) {
-            stable.add(new HistoricalPrice(LocalDate.of(2026, 1, 1).plusDays(i), 100.0));
+            stable.add(
+                    new HistoricalPrice(start.plusDays(i), 100.0)
+            );
         }
-        when(marketData.getHistoricalPrices("AAPL", 252)).thenReturn(stable);
-        when(marketData.getHistoricalPrices("MSFT", 252)).thenReturn(stable);
+
+        when(marketData.getHistoricalPrices("AAPL", 252))
+                .thenReturn(stable);
+
+        when(marketData.getHistoricalPrices("MSFT", 252))
+                .thenReturn(stable);
 
         mvc.perform(get("/portfolio/{id}/risk", id))
                 .andExpect(status().isOk())
@@ -117,48 +211,85 @@ class PortfolioWorkflowIntegrationTest {
                 .andExpect(jsonPath("$.cash").value(700.0))
                 .andExpect(jsonPath("$.annualizedVolatility").value(0.0))
                 .andExpect(jsonPath("$.historicalVaR95").value(0.0))
-                .andExpect(jsonPath("$.largestHoldingConcentration").value(closeTo(2.0 / 3.0, 0.000001)))
-                .andExpect(jsonPath("$.holdingWeights.AAPL").value(closeTo(2.0 / 3.0, 0.000001)))
-                .andExpect(jsonPath("$.holdingWeights.MSFT").value(closeTo(1.0 / 3.0, 0.000001)));
+                .andExpect(jsonPath("$.largestHoldingConcentration")
+                        .value(closeTo(2.0 / 3.0, 1e-6), Double.class))
+                .andExpect(jsonPath("$.holdingWeights.AAPL")
+                        .value(closeTo(2.0 / 3.0, 1e-6), Double.class))
+                .andExpect(jsonPath("$.holdingWeights.MSFT")
+                        .value(closeTo(1.0 / 3.0, 1e-6), Double.class));
 
         verify(marketData).getHistoricalPrices("AAPL", 252);
         verify(marketData).getHistoricalPrices("MSFT", 252);
 
-        when(marketData.getHistoricalPrices("MSFT", 252)).thenReturn(stable.subList(0, 5));
+        // Too little historical data should return an error
+        when(marketData.getHistoricalPrices("MSFT", 252))
+                .thenReturn(stable.subList(0, 5));
+
         mvc.perform(get("/portfolio/{id}/risk", id))
                 .andExpect(status().isBadGateway());
     }
 
     @Test
-    void riskEndpointReturnsNonZeroRiskForDecliningPrices() throws Exception {
+    void riskEndpointReturnsNonZeroRiskForDecliningPrices()
+            throws Exception {
+
         long id = createPortfolio();
+
         buy(id, "AAPL", 1, 100);
         buy(id, "MSFT", 1, 100);
 
         List<HistoricalPrice> apple = new ArrayList<>();
         List<HistoricalPrice> microsoft = new ArrayList<>();
+
         LocalDate start = LocalDate.of(2026, 1, 1);
+
         for (int i = 0; i < 22; i++) {
             LocalDate date = start.plusDays(i);
-            apple.add(new HistoricalPrice(date, 100.0));
-            double msftPrice = i == 0 ? 100.0 : i == 1 ? 90.0 : 81.0;
-            microsoft.add(new HistoricalPrice(date, msftPrice));
-        }
-        apple.add(new HistoricalPrice(LocalDate.of(2026, 2, 1), 10000.0));
-        when(marketData.getHistoricalPrices("AAPL", 252)).thenReturn(apple);
-        when(marketData.getHistoricalPrices("MSFT", 252)).thenReturn(microsoft);
 
-        double expectedVolatility = (8.10 / 181.0)
-                * Math.sqrt(38.0 / 420.0) * Math.sqrt(252.0);
+            apple.add(new HistoricalPrice(date, 100.0));
+
+            double msftPrice =
+                    i == 0 ? 100.0 :
+                            i == 1 ? 90.0 :
+                                    81.0;
+
+            microsoft.add(
+                    new HistoricalPrice(date, msftPrice)
+            );
+        }
+
+        // An unmatched date must not affect aligned calculations
+        apple.add(
+                new HistoricalPrice(
+                        LocalDate.of(2026, 2, 1),
+                        10000.0
+                )
+        );
+
+        when(marketData.getHistoricalPrices("AAPL", 252))
+                .thenReturn(apple);
+
+        when(marketData.getHistoricalPrices("MSFT", 252))
+                .thenReturn(microsoft);
+
+        double expectedVolatility =
+                (8.10 / 181.0)
+                        * Math.sqrt(38.0 / 420.0)
+                        * Math.sqrt(252.0);
+
         mvc.perform(get("/portfolio/{id}/risk", id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.observations").value(21))
                 .andExpect(jsonPath("$.investedValue").value(181.0))
                 .andExpect(jsonPath("$.cash").value(800.0))
-                .andExpect(jsonPath("$.historicalVaR95").value(closeTo(8.10, 1e-9)))
-                .andExpect(jsonPath("$.annualizedVolatility").value(closeTo(expectedVolatility, 1e-9)))
-                .andExpect(jsonPath("$.holdingWeights.AAPL").value(closeTo(100.0 / 181.0, 1e-9)))
-                .andExpect(jsonPath("$.holdingWeights.MSFT").value(closeTo(81.0 / 181.0, 1e-9)));
+                .andExpect(jsonPath("$.historicalVaR95")
+                        .value(closeTo(8.10, 1e-9), Double.class))
+                .andExpect(jsonPath("$.annualizedVolatility")
+                        .value(closeTo(expectedVolatility, 1e-9), Double.class))
+                .andExpect(jsonPath("$.holdingWeights.AAPL")
+                        .value(closeTo(100.0 / 181.0, 1e-9), Double.class))
+                .andExpect(jsonPath("$.holdingWeights.MSFT")
+                        .value(closeTo(81.0 / 181.0, 1e-9), Double.class));
 
         verify(marketData).getHistoricalPrices("AAPL", 252);
         verify(marketData).getHistoricalPrices("MSFT", 252);

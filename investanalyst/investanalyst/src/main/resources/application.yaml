@@ -11,7 +11,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+      show-sql: true
 
-  market-data:
-    api-key: a91dc3d655414c029de67d70f860b9f1
+market-data:
+  api-key: ${API_KEY}

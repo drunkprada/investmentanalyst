@@ -18,6 +18,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.hamcrest.Matchers.closeTo;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -116,9 +117,9 @@ class PortfolioWorkflowIntegrationTest {
                 .andExpect(jsonPath("$.cash").value(700.0))
                 .andExpect(jsonPath("$.annualizedVolatility").value(0.0))
                 .andExpect(jsonPath("$.historicalVaR95").value(0.0))
-                .andExpect(jsonPath("$.largestHoldingConcentration").value(2.0 / 3.0, 0.000001))
-                .andExpect(jsonPath("$.holdingWeights.AAPL").value(2.0 / 3.0, 0.000001))
-                .andExpect(jsonPath("$.holdingWeights.MSFT").value(1.0 / 3.0, 0.000001));
+                .andExpect(jsonPath("$.largestHoldingConcentration").value(closeTo(2.0 / 3.0, 0.000001)))
+                .andExpect(jsonPath("$.holdingWeights.AAPL").value(closeTo(2.0 / 3.0, 0.000001)))
+                .andExpect(jsonPath("$.holdingWeights.MSFT").value(closeTo(1.0 / 3.0, 0.000001)));
 
         verify(marketData).getHistoricalPrices("AAPL", 252);
         verify(marketData).getHistoricalPrices("MSFT", 252);
@@ -126,5 +127,40 @@ class PortfolioWorkflowIntegrationTest {
         when(marketData.getHistoricalPrices("MSFT", 252)).thenReturn(stable.subList(0, 5));
         mvc.perform(get("/portfolio/{id}/risk", id))
                 .andExpect(status().isBadGateway());
+    }
+
+    @Test
+    void riskEndpointReturnsNonZeroRiskForDecliningPrices() throws Exception {
+        long id = createPortfolio();
+        buy(id, "AAPL", 1, 100);
+        buy(id, "MSFT", 1, 100);
+
+        List<HistoricalPrice> apple = new ArrayList<>();
+        List<HistoricalPrice> microsoft = new ArrayList<>();
+        LocalDate start = LocalDate.of(2026, 1, 1);
+        for (int i = 0; i < 22; i++) {
+            LocalDate date = start.plusDays(i);
+            apple.add(new HistoricalPrice(date, 100.0));
+            double msftPrice = i == 0 ? 100.0 : i == 1 ? 90.0 : 81.0;
+            microsoft.add(new HistoricalPrice(date, msftPrice));
+        }
+        apple.add(new HistoricalPrice(LocalDate.of(2026, 2, 1), 10000.0));
+        when(marketData.getHistoricalPrices("AAPL", 252)).thenReturn(apple);
+        when(marketData.getHistoricalPrices("MSFT", 252)).thenReturn(microsoft);
+
+        double expectedVolatility = (8.10 / 181.0)
+                * Math.sqrt(38.0 / 420.0) * Math.sqrt(252.0);
+        mvc.perform(get("/portfolio/{id}/risk", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.observations").value(21))
+                .andExpect(jsonPath("$.investedValue").value(181.0))
+                .andExpect(jsonPath("$.cash").value(800.0))
+                .andExpect(jsonPath("$.historicalVaR95").value(closeTo(8.10, 1e-9)))
+                .andExpect(jsonPath("$.annualizedVolatility").value(closeTo(expectedVolatility, 1e-9)))
+                .andExpect(jsonPath("$.holdingWeights.AAPL").value(closeTo(100.0 / 181.0, 1e-9)))
+                .andExpect(jsonPath("$.holdingWeights.MSFT").value(closeTo(81.0 / 181.0, 1e-9)));
+
+        verify(marketData).getHistoricalPrices("AAPL", 252);
+        verify(marketData).getHistoricalPrices("MSFT", 252);
     }
 }

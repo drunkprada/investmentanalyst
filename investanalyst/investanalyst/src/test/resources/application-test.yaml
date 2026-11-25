@@ -1,0 +1,11 @@
+# Dedicated disposable PostgreSQL database. Never point this profile at production.
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/investanalyst_test
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  market-data:
+    api-key: test-only

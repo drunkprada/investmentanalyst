@@ -57,12 +57,4 @@ public class PortfolioServiceTest {
         Mockito.verify(repository, Mockito.times(1)).save(Mockito.any(Portfolio.class));
     }
 
-    @Test
-    void rejectMissingPortfolio(){
-        PortfolioRepository repository = Mockito.mock(PortfolioRepository.class);
-        PortfolioService service = new PortfolioService(repository);
-
-        Mockito.when(repository.save(Mockito.any(Portfolio.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-    }
 }

@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Investment Analyst · Demo</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, sans-serif; color: #18283d; background: #f5f7fa; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { background: #173253; color: white; padding: 24px max(22px, calc((100vw - 1100px) / 2)); }
+    h1 { font-size: 1.6rem; margin: 0 0 4px; }
+    header p { color: #d5e1ee; margin: 0; }
+    main { max-width: 1100px; margin: 26px auto; padding: 0 20px 35px; }
+    .layout { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: 18px; align-items: start; }
+    .panel { background: white; border: 1px solid #e0e6ed; border-radius: 12px; padding: 18px; margin-bottom: 18px; }
+    h2 { font-size: 1.1rem; margin: 0 0 14px; }
+    h3 { font-size: .95rem; margin: 0 0 10px; }
+    label { display: block; font-size: .86rem; font-weight: 600; margin: 12px 0 5px; }
+    input, select, button { font: inherit; }
+    input, select { width: 100%; min-width: 0; border: 1px solid #cdd7e2; border-radius: 7px; padding: 10px; background: white; }
+    button { background: #1c5ea1; border: 0; border-radius: 7px; padding: 10px 15px; color: white; cursor: pointer; }
+    button:hover { background: #174d83; }
+    button:disabled { opacity: .55; cursor: wait; }
+    .secondary { background: #e9eff6; color: #173253; }
+    .secondary:hover { background: #dce6f2; }
+    .actions { display: flex; gap: 9px; margin-top: 14px; flex-wrap: wrap; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .metric { background: #f0f5fb; border-radius: 9px; padding: 13px; }
+    .metric span { display: block; color: #51637a; font-size: .8rem; margin-bottom: 6px; }
+    .metric strong { display: block; font-size: 1.12rem; overflow-wrap: anywhere; }
+    .muted { color: #63748a; font-size: .9rem; }
+    .notice { padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #bad7ed; background: #edf7fe; }
+    .notice.error { border-color: #e8b7b7; background: #fff1f1; color: #942c2c; }
+    .hidden { display: none; }
+    .table-wrap { width: 100%; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    th, td { text-align: left; padding: 9px 7px; border-bottom: 1px solid #ebeff4; white-space: nowrap; }
+    th { color: #52637b; font-weight: 600; }
+    .subheading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .small { font-size: .81rem; }
+    @media (max-width: 760px) {
+      .layout { grid-template-columns: 1fr; }
+      .summary { grid-template-columns: 1fr; }
+      .two { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Investment Analyst</h1>
+    <p>Simulated portfolio dashboard · No real-money trading</p>
+  </header>
+  <main>
+    <div id="notice" class="notice hidden" role="status" aria-live="polite"></div>
+    <div class="layout">
+      <aside>
+        <section class="panel">
+          <h2>Portfolio</h2>
+          <label for="portfolioSelect">Select portfolio</label>
+          <select id="portfolioSelect"><option value="">Loading…</option></select>
+          <div class="actions"><button class="secondary" id="refreshBtn" type="button">Refresh</button></div>
+        </section>
+        <section class="panel">
+          <h2>Create portfolio</h2>
+          <form id="createForm">
+            <label for="portfolioName">Name</label>
+            <input id="portfolioName" maxlength="120" required placeholder="My portfolio">
+            <label for="initialCash">Starting cash (USD)</label>
+            <input id="initialCash" type="number" min="0" step="0.01" value="10000.00" required>
+            <div class="actions"><button type="submit">Create portfolio</button></div>
+          </form>
+        </section>
+        <section class="panel" id="tradePanel">
+          <h2>Simulated trade</h2>
+          <p class="muted small">Uses your entered demo execution price, not a live quote.</p>
+          <form id="tradeForm">
+            <label for="tradeType">Action</label>
+            <select id="tradeType"><option value="buy">Buy</option><option value="sell">Sell</option></select>
+            <label for="ticker">Ticker</label>
+            <input id="ticker" placeholder="AAPL" maxlength="10" required>
+            <div class="two">
+              <div><label for="quantity">Quantity</label><input id="quantity" type="number" min="0.00000001" step="any" required></div>
+              <div><label for="price">Price (USD)</label><input id="price" type="number" min="0.01" step="0.01" required></div>
+            </div>
+            <div class="actions"><button type="submit" id="tradeSubmit">Submit demo trade</button></div>
+          </form>
+        </section>
+      </aside>
+      <div>
+        <section class="panel">
+          <div class="subheading"><h2 id="selectedName">Portfolio overview</h2><span class="muted small" id="portfolioId"></span></div>
+          <div class="summary">
+            <div class="metric"><span>Available cash</span><strong id="availableCash">—</strong></div>
+            <div class="metric"><span>Initial cash</span><strong id="startingCash">—</strong></div>
+            <div class="metric"><span>Holdings</span><strong id="holdingCount">—</strong></div>
+          </div>
+        </section>
+        <section class="panel">
+          <h2>Holdings</h2>
+          <div class="table-wrap"><table><thead><tr><th>Ticker</th><th>Quantity</th><th>Average cost</th></tr></thead><tbody id="holdingsBody"><tr><td colspan="3" class="muted">Select a portfolio.</td></tr></tbody></table></div>
+        </section>
+        <section class="panel">
+          <h2>Recent trades</h2>
+          <div class="table-wrap"><table><thead><tr><th>Action</th><th>Ticker</th><th>Quantity</th><th>Price</th><th>Date</th></tr></thead><tbody id="tradesBody"><tr><td colspan="5" class="muted">Select a portfolio.</td></tr></tbody></table></div>
+        </section>
+        <section class="panel">
+          <div class="subheading"><h2>Historical risk</h2><button class="secondary" id="riskBtn" type="button">Calculate risk</button></div>
+          <p class="muted small">Requires sufficient historical market data. This request may contact the configured provider.</p>
+          <div id="riskResult" class="muted">Select a portfolio, then calculate risk.</div>
+        </section>
+      </div>
+    </div>
+  </main>
+  <script>
+    "use strict";
+    const el = (id) => document.getElementById(id);
+    const money = (amount, currency = "USD") => new Intl.NumberFormat("en-US", {style:"currency", currency}).format(Number(amount));
+    const decimal = (value) => new Intl.NumberFormat("en-US", {maximumFractionDigits:8}).format(Number(value));
+    const percent = (value) => (Number(value) * 100).toFixed(2) + "%";
+    let selectedId = "";
+
+    function notice(message, isError = false) {
+      const area = el("notice");
+      area.textContent = message;
+      area.className = "notice" + (isError ? " error" : "");
+    }
+
+    async function api(path, options) {
+      const res = await fetch(path, options);
+      if (!res.ok) {
+        let explanation = "";
+        try {
+          const data = await res.json();
+          explanation = data.error || data.detail || data.message || "";
+        } catch (_) {}
+        throw new Error(explanation || ("Request failed (HTTP " + res.status + ")"));
+      }
+      if (res.status === 204) return null;
+      return res.json();
+    }
+
+    async function submitJson(path, data) {
+      return api(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data)});
+    }
+
+    function fillRows(id, rows, columns, emptyText) {
+      const body = el(id);
+      body.replaceChildren();
+      if (!rows.length) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = columns.length;
+        td.className = "muted";
+        td.textContent = emptyText;
+        tr.append(td);
+        body.append(tr);
+        return;
+      }
+      for (const item of rows) {
+        const tr = document.createElement("tr");
+        for (const column of columns) {
+          const td = document.createElement("td");
+          td.textContent = String(column(item) ?? "—");
+          tr.append(td);
+        }
+        body.append(tr);
+      }
+    }
+
+    function resetOverview() {
+      selectedId = "";
+      el("selectedName").textContent = "Portfolio overview";
+      el("portfolioId").textContent = "";
+      el("availableCash").textContent = "—";
+      el("startingCash").textContent = "—";
+      el("holdingCount").textContent = "—";
+      el("riskResult").textContent = "Select a portfolio, then calculate risk.";
+      fillRows("holdingsBody", [], [() => "", () => "", () => ""], "Select a portfolio.");
+      fillRows("tradesBody", [], [() => "", () => "", () => "", () => "", () => ""], "Select a portfolio.");
+    }
+
+    async function loadPortfolios(preferredId) {
+      const portfolios = await api("/portfolio");
+      const select = el("portfolioSelect");
+      const wanted = preferredId || selectedId;
+      select.replaceChildren();
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = portfolios.length ? "Choose a portfolio" : "No portfolios yet";
+      select.append(placeholder);
+      for (const portfolio of portfolios) {
+        const option = document.createElement("option");
+        option.value = String(portfolio.id);
+        option.textContent = portfolio.name + " (#" + portfolio.id + ")";
+        select.append(option);
+      }
+      const ids = portfolios.map((p) => String(p.id));
+      const next = ids.includes(String(wanted)) ? String(wanted) : (ids[0] || "");
+      select.value = next;
+      if (next) await loadSelected(next);
+      else resetOverview();
+    }
+
+    async function loadSelected(id) {
+      if (!id) { resetOverview(); return; }
+      selectedId = String(id);
+      const [portfolio, holdings, trades] = await Promise.all([
+        api("/portfolio/" + encodeURIComponent(id)),
+        api("/portfolio/" + encodeURIComponent(id) + "/holdings"),
+        api("/portfolio/" + encodeURIComponent(id) + "/trades")
+      ]);
+      if (selectedId !== String(id)) return;
+      el("selectedName").textContent = portfolio.name;
+      el("portfolioId").textContent = "ID " + portfolio.id;
+      el("availableCash").textContent = money(portfolio.availableCash, portfolio.currency);
+      el("startingCash").textContent = money(portfolio.initialCash, portfolio.currency);
+      el("holdingCount").textContent = String(holdings.length);
+      fillRows("holdingsBody", holdings, [
+        (x) => x.ticker, (x) => decimal(x.quantity), (x) => money(x.averageCost, portfolio.currency)
+      ], "No holdings yet.");
+      fillRows("tradesBody", trades, [
+        (x) => x.type, (x) => x.ticker, (x) => decimal(x.quantity),
+        (x) => money(x.executionPrice, portfolio.currency),
+        (x) => x.executionTime ? new Date(x.executionTime).toLocaleString() : "—"
+      ], "No trades yet.");
+      el("riskResult").textContent = "Click Calculate risk to retrieve metrics.";
+    }
+
+    function withBusy(button, operation) {
+      return async () => {
+        button.disabled = true;
+        try { await operation(); } catch (error) { notice(error.message, true); }
+        finally { button.disabled = false; }
+      };
+    }
+
+    el("portfolioSelect").addEventListener("change", async (event) => {
+      try { await loadSelected(event.target.value); } catch (error) { notice(error.message, true); }
+    });
+    el("refreshBtn").addEventListener("click", withBusy(el("refreshBtn"), async () => {
+      await loadPortfolios();
+      notice("Portfolio data refreshed.");
+    }));
+    el("createForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+      void withBusy(event.submitter || el("createForm").querySelector("button"), async () => {
+        const created = await submitJson("/portfolio", {
+          name:el("portfolioName").value.trim(),
+          initialCash:el("initialCash").value
+        });
+        await loadPortfolios(created.id);
+        el("portfolioName").value = "";
+        notice("Portfolio created.");
+      })();
+    });
+    el("tradeForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!selectedId) { notice("Create or choose a portfolio first.", true); return; }
+      void withBusy(el("tradeSubmit"), async () => {
+        const type = el("tradeType").value;
+        await submitJson("/portfolio/" + encodeURIComponent(selectedId) + "/" + type, {
+          ticker:el("ticker").value.trim().toUpperCase(),
+          quantity:el("quantity").value,
+          price:el("price").value
+        });
+        await loadSelected(selectedId);
+        notice("Simulated " + type + " completed.");
+      })();
+    });
+    el("riskBtn").addEventListener("click", withBusy(el("riskBtn"), async () => {
+      if (!selectedId) throw new Error("Select a portfolio first.");
+      el("riskResult").textContent = "Calculating…";
+      const result = await api("/portfolio/" + encodeURIComponent(selectedId) + "/risk");
+      const lines = [
+        ["Invested value", money(result.investedValue, result.currency)],
+        ["Annualised volatility", percent(result.annualizedVolatility)],
+        ["Historical VaR (95%)", money(result.historicalVaR95, result.currency)],
+        ["Largest holding", percent(result.largestHoldingConcentration)],
+        ["Observations", result.observations],
+        ["Period", result.startDate + " to " + result.endDate]
+      ];
+      const table = document.createElement("table");
+      const body = document.createElement("tbody");
+      for (const [name, value] of lines) {
+        const tr = document.createElement("tr");
+        const th = document.createElement("th");
+        th.scope = "row"; th.textContent = name;
+        const td = document.createElement("td");
+        td.textContent = String(value);
+        tr.append(th, td); body.append(tr);
+      }
+      table.append(body);
+      el("riskResult").replaceChildren(table);
+    }));
+    loadPortfolios().catch((error) => notice("Could not load portfolios: " + error.message, true));
+  </script>
+</body>
+</html>
